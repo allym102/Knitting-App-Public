@@ -13,7 +13,7 @@
 const PASS='allymumknit',KEY='stitch-studio-library-v1',SESSION='stitch-studio-unlocked';
 const $=id=>document.getElementById(id);
 const palette=['#ffffff','#111111','#db5050','#ed9d49','#f2d66b','#78a765','#4b9bb9','#7469af','#cf83b6','#8e6547','#c1c1c1','#2e5c45'];
-let patterns=[],current='',color='#111111',painting=false,activeTool='move',lineStart=null,previewEnd=null,gesture=null;const LEFT=42,TOP=36,BOTTOM=36;const undoStacks=new Map(),pointers=new Map();
+let patterns=[],current='',color='#111111',painting=false,activeTool='move',lineStart=null,previewEnd=null,gesture=null,lastZoom=24;const LEFT=42,TOP=36,BOTTOM=36;const undoStacks=new Map(),pointers=new Map();
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2);
 function makePattern(name='Untitled pattern',width=24,height=24,type='cross-stitch'){return{id:uid(),name,type,width,height,cells:Array(width*height).fill('#ffffff'),lines:[],updatedAt:new Date().toISOString()}}
 function safeLoad(){try{const data=JSON.parse(localStorage.getItem(KEY)||'[]');return Array.isArray(data)?data.filter(valid):[]}catch{return []}}
@@ -26,7 +26,7 @@ function setTool(tool){activeTool=tool;for(const t of ['move','paint','erase','l
 function gridPoint(e){const r=$('grid').getBoundingClientRect(),z=Number($('zoom').value);return{x:(e.clientX-r.left-LEFT)/z,y:(e.clientY-r.top-TOP)/z}}
 function clamp(n,a,b){return Math.min(b,Math.max(a,n))}
 function linePoint(e){const p=selected(),q=gridPoint(e);return{x:clamp(Math.round(q.x),0,p.width),y:clamp(Math.round(q.y),0,p.height)}}
-function changeZoom(value){const wrap=$('canvasWrap'),old=Number($('zoom').value),next=clamp(Math.round(value),10,60);if(next===old)return;const cx=wrap.scrollLeft+wrap.clientWidth/2,cy=wrap.scrollTop+wrap.clientHeight/2;$('zoom').value=String(next);draw();wrap.scrollLeft=(cx-LEFT)*next/old+LEFT-wrap.clientWidth/2;wrap.scrollTop=(cy-TOP)*next/old+TOP-wrap.clientHeight/2}
+function changeZoom(value){const wrap=$('canvasWrap'),old=lastZoom,next=clamp(Math.round(value),10,60);if(next===old)return;const cx=wrap.scrollLeft+wrap.clientWidth/2,cy=wrap.scrollTop+wrap.clientHeight/2;$('zoom').value=String(next);draw();wrap.scrollLeft=(cx-LEFT)*next/old+LEFT-wrap.clientWidth/2;wrap.scrollTop=(cy-TOP)*next/old+TOP-wrap.clientHeight/2}
 
 function render(){const lib=$('library');lib.replaceChildren();patterns.forEach(p=>{const b=document.createElement('button');b.textContent=p.name;b.className=p.id===current?'active':'';b.onclick=()=>{current=p.id;render()};lib.appendChild(b)});const p=selected();$('patternTitle').textContent=p?p.name:'No pattern selected';$('type').disabled=!p;$('type').value=p?p.type:'cross-stitch';$('gridWidth').value=p?p.width:24;$('gridHeight').value=p?p.height:24;$('undoTool').disabled=!(undoStacks.get(current)||[]).length;draw()}
 const symbols=['◆','♥','●','▲','■','✚','✿','★','◇','☀','⬟','✦'];
@@ -40,7 +40,7 @@ for(let y=0;y<p.height;y++)for(let x=0;x<p.width;x++){const v=p.cells[y*p.width+
 function stroke(line){ctx.save();ctx.beginPath();ctx.moveTo(LEFT+line.x1*z,TOP+line.y1*z);ctx.lineTo(LEFT+line.x2*z,TOP+line.y2*z);ctx.strokeStyle=mode==='symbols'?'#111':(line.color||'#111111');ctx.lineWidth=Math.max(2,z*.15);ctx.lineCap='round';ctx.stroke();ctx.restore()}
 (p.lines||[]).forEach(stroke);if(tempLine)stroke(tempLine);
 }
-function draw(){const p=selected(),c=$('grid');if(!p){c.width=1;c.height=1;return}const z=Number($('zoom').value);$('zoomValue').textContent=Math.round(z/24*100)+'%';renderGrid(c,p,z,'colour',lineStart&&previewEnd?{x1:lineStart.x,y1:lineStart.y,x2:previewEnd.x,y2:previewEnd.y,color}:null)}
+function draw(){const p=selected(),c=$('grid');if(!p){c.width=1;c.height=1;return}const z=Number($('zoom').value);lastZoom=z;$('zoomValue').textContent=Math.round(z/24*100)+'%';renderGrid(c,p,z,'colour',lineStart&&previewEnd?{x1:lineStart.x,y1:lineStart.y,x2:previewEnd.x,y2:previewEnd.y,color}:null)}
 function paint(e){const p=selected();if(!p)return;const q=gridPoint(e),x=Math.floor(q.x),y=Math.floor(q.y);if(x<0||y<0||x>=p.width||y>=p.height)return;const v=activeTool==='erase'?'#ffffff':color;if(p.cells[y*p.width+x]!==v){p.cells[y*p.width+x]=v;p.updatedAt=new Date().toISOString();draw();save()}}
 function askNew(){const name=prompt('Pattern name?','My new pattern');if(name===null)return;const w=Number(prompt('Width in stitches (1–200)?','24'));if(!Number.isInteger(w)||w<1||w>200){alert('Enter a width from 1 to 200.');return}const h=Number(prompt('Height in stitches (1–200)?','24'));if(!Number.isInteger(h)||h<1||h>200){alert('Enter a height from 1 to 200.');return}const p=makePattern(name.trim()||'Untitled pattern',w,h);patterns.push(p);current=p.id;save();render()}
 function showApp(){sessionStorage.setItem(SESSION,'yes');$('gate').classList.add('hidden');$('app').classList.remove('hidden');patterns=safeLoad();if(!patterns.length){patterns=[makePattern('My first pattern')];save()}current=patterns[0].id;render()}
@@ -64,7 +64,8 @@ canvas.addEventListener('pointerup',finishPointer);canvas.addEventListener('poin
 $('pdf').onclick=()=>{
 const p=selected();if(!p)return;
 try{
-const preview=document.createElement('canvas'),cellSize=Math.max(8,Math.min(26,Math.floor(2200/Math.max(p.width,p.height))));renderGrid(preview,p,cellSize,$('pdfMode').value);
+const base=document.createElement('canvas'),cellSize=Math.max(8,Math.min(26,Math.floor(2200/Math.max(p.width,p.height))));renderGrid(base,p,cellSize,$('pdfMode').value);
+let preview=base;if($('pdfMode').value==='symbols'){const colors=[...new Set(p.cells.filter(c=>c.toLowerCase()!=='#ffffff'))],legendRows=Math.ceil(colors.length/3),legendHeight=colors.length?38+legendRows*22:0;preview=document.createElement('canvas');preview.width=base.width;preview.height=base.height+legendHeight;const g=preview.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,preview.width,preview.height);g.drawImage(base,0,0);if(colors.length){g.fillStyle='#222';g.textAlign='left';g.font='bold 13px system-ui';g.fillText('Symbol key (original colour)',12,base.height+20);g.font='12px system-ui';colors.forEach((c,i)=>{const col=i%3,row=Math.floor(i/3),xx=12+col*(preview.width/3),yy=base.height+40+row*22;g.fillText(symbols[i%symbols.length]+'  '+c,xx,yy)})}}}
 const data=preview.toDataURL('image/jpeg',.94).split(',')[1],binary=atob(data),jpg=new Uint8Array(binary.length);for(let i=0;i<binary.length;i++)jpg[i]=binary.charCodeAt(i);
 const landscape=preview.width>preview.height,pageW=landscape?842:595,pageH=landscape?595:842,margin=35,scale=Math.min((pageW-2*margin)/preview.width,(pageH-2*margin)/preview.height),drawW=preview.width*scale,drawH=preview.height*scale,x=(pageW-drawW)/2,y=(pageH-drawH)/2;
 const enc=new TextEncoder(),parts=[],offsets=[0];let length=0;
