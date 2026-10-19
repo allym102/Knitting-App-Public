@@ -74,7 +74,18 @@ $('pdf').onclick=()=>{
 const p=selected();if(!p)return;
 try{
 const base=document.createElement('canvas'),cellSize=Math.max(8,Math.min(26,Math.floor(2200/Math.max(p.width,p.height))));renderGrid(base,p,cellSize,$('pdfMode').value);
-let preview=base;if($('pdfMode').value==='symbols'){const colors=[...new Set(p.cells.filter(c=>c!==null))],legendRows=Math.ceil(colors.length/3),legendHeight=colors.length?38+legendRows*22:0;preview=document.createElement('canvas');preview.width=base.width;preview.height=base.height+legendHeight;const g=preview.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,preview.width,preview.height);g.drawImage(base,0,0);if(colors.length){g.fillStyle='#222';g.textAlign='left';g.font='bold 13px system-ui';g.fillText('Symbol key (original colour)',12,base.height+20);g.font='12px system-ui';colors.forEach((c,i)=>{const col=i%3,row=Math.floor(i/3),xx=12+col*(preview.width/3),yy=base.height+40+row*22;g.fillText((c==='#ffffff'?'W':symbols[i%symbols.length])+'  '+c,xx,yy)})}}
+const colors=[...new Set(p.cells.filter(c=>c!==null))],mode=$('pdfMode').value;
+const legendRows=Math.ceil(Math.max(1,colors.length)/2),legendHeight=60+legendRows*25;
+const preview=document.createElement('canvas');preview.width=Math.max(base.width,560);preview.height=base.height+legendHeight;
+const g=preview.getContext('2d');g.fillStyle='#ffffff';g.fillRect(0,0,preview.width,preview.height);g.drawImage(base,0,0);
+g.fillStyle='#222';g.textAlign='left';g.textBaseline='middle';g.font='bold 16px system-ui';g.fillText('Thread colours needed - '+p.name,12,base.height+20);
+g.font='12px system-ui';if(!colors.length)g.fillText('No coloured stitches yet',12,base.height+49);
+colors.forEach((c,i)=>{const col=i%2,row=Math.floor(i/2),xx=12+col*(preview.width/2),yy=base.height+50+row*25;
+g.fillStyle='#fff';g.fillRect(xx,yy-9,19,19);
+if(mode==='colour'){g.fillStyle=c;g.fillRect(xx,yy-9,19,19);g.strokeStyle='#777';g.strokeRect(xx,yy-9,19,19)}
+else{g.fillStyle='#222';g.font='bold 15px system-ui';g.fillText(c==='#ffffff'?'W':symbols[i%symbols.length],xx+2,yy)}
+g.fillStyle='#222';g.font='12px system-ui';const count=p.cells.filter(v=>v===c).length;g.fillText(threadName(c)+' - '+count+' stitches',xx+26,yy)});
+
 const data=preview.toDataURL('image/jpeg',.94).split(',')[1],binary=atob(data),jpg=new Uint8Array(binary.length);for(let i=0;i<binary.length;i++)jpg[i]=binary.charCodeAt(i);
 const landscape=preview.width>preview.height,pageW=landscape?842:595,pageH=landscape?595:842,margin=35,scale=Math.min((pageW-2*margin)/preview.width,(pageH-2*margin)/preview.height),drawW=preview.width*scale,drawH=preview.height*scale,x=(pageW-drawW)/2,y=(pageH-drawH)/2;
 const enc=new TextEncoder(),parts=[],offsets=[0];let length=0;
