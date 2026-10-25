@@ -106,35 +106,60 @@ canvas.addEventListener('pointerup',finishPointer);canvas.addEventListener('poin
 $('pdf').onclick=()=>{
 const p=selected();if(!p)return;
 try{
-const base=document.createElement('canvas'),cellSize=Math.max(8,Math.min(26,Math.floor(2200/Math.max(p.width,p.height))));renderGrid(base,p,cellSize,$('pdfMode').value);
-const colors=[...new Set(p.cells.filter(c=>c!==null))],mode=$('pdfMode').value;
-const legendRows=Math.ceil(Math.max(1,colors.length)/2),legendHeight=60+legendRows*25;
-const preview=document.createElement('canvas');preview.width=Math.max(base.width,560);preview.height=base.height+legendHeight;
-const g=preview.getContext('2d');g.fillStyle='#ffffff';g.fillRect(0,0,preview.width,preview.height);g.drawImage(base,0,0);
-g.fillStyle='#222';g.textAlign='left';g.textBaseline='middle';g.font='bold 16px system-ui';g.fillText('Thread colours needed - '+p.name,12,base.height+20);
-g.font='12px system-ui';if(!colors.length)g.fillText('No coloured stitches yet',12,base.height+49);
-colors.forEach((c,i)=>{const col=i%2,row=Math.floor(i/2),xx=12+col*(preview.width/2),yy=base.height+50+row*25;
-g.fillStyle='#fff';g.fillRect(xx,yy-9,19,19);
-if(mode==='colour'){g.fillStyle=c;g.fillRect(xx,yy-9,19,19);g.strokeStyle='#777';g.strokeRect(xx,yy-9,19,19)}
-else{g.fillStyle='#222';g.font='bold 15px system-ui';g.fillText(c==='#ffffff'?'W':symbols[i%symbols.length],xx+2,yy)}
-g.fillStyle='#222';g.font='12px system-ui';const count=p.cells.filter(v=>v===c).length;g.fillText(threadName(c)+' - '+count+' stitches',xx+26,yy)});
-
-const data=preview.toDataURL('image/jpeg',.94).split(',')[1],binary=atob(data),jpg=new Uint8Array(binary.length);for(let i=0;i<binary.length;i++)jpg[i]=binary.charCodeAt(i);
-const landscape=preview.width>preview.height,pageW=landscape?842:595,pageH=landscape?595:842,margin=35,scale=Math.min((pageW-2*margin)/preview.width,(pageH-2*margin)/preview.height),drawW=preview.width*scale,drawH=preview.height*scale,x=(pageW-drawW)/2,y=(pageH-drawH)/2;
-const enc=new TextEncoder(),parts=[],offsets=[0];let length=0;
+const root=p.type==='knitting'?needleRoot(p):p;
+const needles=p.type==='knitting'?needleMembers(p).slice(0,root.needleVisible||1):[p];
+const pairs=[];for(let i=0;i<needles.length;i+=2)pairs.push(needles.slice(i,i+2));
+const multi=needles.length>1,mode=$('pdfMode').value;
+const pages=pairs.map((pair,pageIndex)=>{
+const cellSize=Math.max(8,Math.min(multi?24:26,Math.floor((multi?950:2200)/Math.max(...pair.map(n=>n.width),...pair.map(n=>n.height)))));
+const charts=pair.map(n=>{const canvas=document.createElement('canvas');renderGrid(canvas,n,cellSize,mode);return canvas});
+const gap=28,pad=18,header=44,legendFont=13;
+const colW=Math.max(...charts.map(c=>c.width),340);
+const chartH=Math.max(...charts.map(c=>c.height));
+const width=pad*2+colW*pair.length+gap*(pair.length-1);
+const colourSets=pair.map(n=>[...new Set(n.cells.filter(v=>v!==null))]);
+const legendRows=Math.max(...colourSets.map(colors=>colors.length),1);
+const height=header+chartH+40+legendRows*23+pad;
+const preview=document.createElement('canvas');preview.width=width;preview.height=height;
+const g=preview.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,width,height);
+g.fillStyle='#253329';g.textAlign='left';g.textBaseline='middle';g.font='bold 19px system-ui';
+g.fillText(multi?root.name+' — Needles '+(pageIndex*2+1)+'–'+(pageIndex*2+pair.length):p.name,pad,21);
+pair.forEach((n,i)=>{
+const xx=pad+i*(colW+gap),chart=charts[i],colors=colourSets[i];
+g.font='bold 15px system-ui';g.fillStyle='#253329';g.fillText(multi?'Needle '+(pageIndex*2+i+1):n.name,xx,header-10);
+g.drawImage(chart,xx,header);
+g.font='bold 13px system-ui';g.fillStyle='#253329';g.fillText('Thread colours — '+n.name,xx,header+chartH+17);
+colors.forEach((c,j)=>{const yy=header+chartH+42+j*23;g.fillStyle='#fff';g.fillRect(xx,yy-9,17,17);
+if(mode==='colour'){g.fillStyle=c;g.fillRect(xx,yy-9,17,17);g.strokeStyle='#777';g.strokeRect(xx,yy-9,17,17)}
+else{g.fillStyle='#222';g.font='bold 14px system-ui';g.fillText(c==='#ffffff'?'W':symbols[j%symbols.length],xx+2,yy)}
+g.fillStyle='#222';g.font=legendFont+'px system-ui';g.fillText(threadName(c)+' — '+n.cells.filter(v=>v===c).length+' stitches',xx+24,yy)});
+if(!colors.length){g.fillStyle='#555';g.font='12px system-ui';g.fillText('No coloured stitches yet',xx,header+chartH+42)}
+});
+const data=preview.toDataURL('image/jpeg',.94).split(',')[1],binary=atob(data),jpg=new Uint8Array(binary.length);
+for(let i=0;i<binary.length;i++)jpg[i]=binary.charCodeAt(i);
+return{jpg,width,height};
+});
+const pageW=842,pageH=595,margin=24,enc=new TextEncoder(),parts=[],offsets=[0];let length=0;
 function add(value){const bytes=typeof value==='string'?enc.encode(value):value;parts.push(bytes);length+=bytes.length}
-function obj(n,body){offsets[n]=length;add(n+' 0 obj\n'+body+'\nendobj\n')}
-add('%PDF-1.4\n');
-obj(1,'<< /Type /Catalog /Pages 2 0 R >>');
-obj(2,'<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
-obj(3,'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 '+pageW+' '+pageH+'] /Resources << /XObject << /Im1 4 0 R >> >> /Contents 5 0 R >>');
-offsets[4]=length;add('4 0 obj\n<< /Type /XObject /Subtype /Image /Width '+preview.width+' /Height '+preview.height+' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+jpg.length+' >>\nstream\n');add(jpg);add('\nendstream\nendobj\n');
-const commands='q\n'+drawW.toFixed(2)+' 0 0 '+drawH.toFixed(2)+' '+x.toFixed(2)+' '+y.toFixed(2)+' cm\n/Im1 Do\nQ\n';
-const cmd=enc.encode(commands);offsets[5]=length;add('5 0 obj\n<< /Length '+cmd.length+' >>\nstream\n');add(cmd);add('endstream\nendobj\n');
-const xref=length;add('xref\n0 6\n0000000000 65535 f \n');for(let i=1;i<=5;i++)add(String(offsets[i]).padStart(10,'0')+' 00000 n \n');
-add('trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n'+xref+'\n%%EOF');
-const blob=new Blob(parts,{type:'application/pdf'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=(p.name.replace(/[^a-z0-9_-]+/gi,'-').slice(0,65)||'stitch-pattern')+'-A4.pdf';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
-$('notice').textContent='📄 A4 PDF prepared. On iPhone, use Safari’s download button or Files app to find it.';
+function obj(n,body){offsets[n]=length;add(n+' 0 obj\\n'+body+'\\nendobj\\n')}
+add('%PDF-1.4\\n');obj(1,'<< /Type /Catalog /Pages 2 0 R >>');
+const pageIds=pages.map((_,i)=>3+i*3);
+obj(2,'<< /Type /Pages /Kids ['+pageIds.map(n=>n+' 0 R').join(' ')+'] /Count '+pages.length+' >>');
+pages.forEach((page,i)=>{
+const pageId=3+i*3,imageId=pageId+1,contentId=pageId+2;
+obj(pageId,'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 '+pageW+' '+pageH+'] /Resources << /XObject << /Im1 '+imageId+' 0 R >> >> /Contents '+contentId+' 0 R >>');
+offsets[imageId]=length;add(imageId+' 0 obj\\n<< /Type /XObject /Subtype /Image /Width '+page.width+' /Height '+page.height+' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+page.jpg.length+' >>\\nstream\\n');add(page.jpg);add('\\nendstream\\nendobj\\n');
+const scale=Math.min((pageW-2*margin)/page.width,(pageH-2*margin)/page.height),dw=page.width*scale,dh=page.height*scale,x=(pageW-dw)/2,y=(pageH-dh)/2;
+const commands='q\\n'+dw.toFixed(2)+' 0 0 '+dh.toFixed(2)+' '+x.toFixed(2)+' '+y.toFixed(2)+' cm\\n/Im1 Do\\nQ\\n',cmd=enc.encode(commands);
+offsets[contentId]=length;add(contentId+' 0 obj\\n<< /Length '+cmd.length+' >>\\nstream\\n');add(cmd);add('endstream\\nendobj\\n')
+});
+const total=2+pages.length*3,xref=length;add('xref\\n0 '+(total+1)+'\\n0000000000 65535 f \\n');
+for(let i=1;i<=total;i++)add(String(offsets[i]).padStart(10,'0')+' 00000 n \\n');
+add('trailer\\n<< /Size '+(total+1)+' /Root 1 0 R >>\\nstartxref\\n'+xref+'\\n%%EOF');
+const blob=new Blob(parts,{type:'application/pdf'}),url=URL.createObjectURL(blob),link=document.createElement('a');
+link.href=url;link.download=(root.name.replace(/[^a-z0-9_-]+/gi,'-').slice(0,65)||'stitch-pattern')+(multi?'-needles':'')+'-A4.pdf';
+document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+$('notice').textContent='📄 Exported '+needles.length+' needle chart'+(needles.length===1?'':'s')+' on '+pages.length+' A4 landscape page'+(pages.length===1?'':'s')+'.';
 }catch(err){alert('PDF export could not finish: '+err.message)}
 };
 $('export').onclick=()=>{const data=JSON.stringify({format:'stitch-studio',version:2,patterns},null,2);const url=URL.createObjectURL(new Blob([data],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='stitch-studio-library.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),3000)};
