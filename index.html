@@ -141,21 +141,21 @@ return{jpg,width,height};
 });
 const pageW=842,pageH=595,margin=24,enc=new TextEncoder(),parts=[],offsets=[0];let length=0;
 function add(value){const bytes=typeof value==='string'?enc.encode(value):value;parts.push(bytes);length+=bytes.length}
-function obj(n,body){offsets[n]=length;add(n+' 0 obj\\n'+body+'\\nendobj\\n')}
-add('%PDF-1.4\\n');obj(1,'<< /Type /Catalog /Pages 2 0 R >>');
+function obj(n,body){offsets[n]=length;add(n+' 0 obj\n'+body+'\nendobj\n')}
+add('%PDF-1.4\n');obj(1,'<< /Type /Catalog /Pages 2 0 R >>');
 const pageIds=pages.map((_,i)=>3+i*3);
 obj(2,'<< /Type /Pages /Kids ['+pageIds.map(n=>n+' 0 R').join(' ')+'] /Count '+pages.length+' >>');
 pages.forEach((page,i)=>{
 const pageId=3+i*3,imageId=pageId+1,contentId=pageId+2;
 obj(pageId,'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 '+pageW+' '+pageH+'] /Resources << /XObject << /Im1 '+imageId+' 0 R >> >> /Contents '+contentId+' 0 R >>');
-offsets[imageId]=length;add(imageId+' 0 obj\\n<< /Type /XObject /Subtype /Image /Width '+page.width+' /Height '+page.height+' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+page.jpg.length+' >>\\nstream\\n');add(page.jpg);add('\\nendstream\\nendobj\\n');
+offsets[imageId]=length;add(imageId+' 0 obj\n<< /Type /XObject /Subtype /Image /Width '+page.width+' /Height '+page.height+' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+page.jpg.length+' >>\nstream\n');add(page.jpg);add('\nendstream\nendobj\n');
 const scale=Math.min((pageW-2*margin)/page.width,(pageH-2*margin)/page.height),dw=page.width*scale,dh=page.height*scale,x=(pageW-dw)/2,y=(pageH-dh)/2;
-const commands='q\\n'+dw.toFixed(2)+' 0 0 '+dh.toFixed(2)+' '+x.toFixed(2)+' '+y.toFixed(2)+' cm\\n/Im1 Do\\nQ\\n',cmd=enc.encode(commands);
-offsets[contentId]=length;add(contentId+' 0 obj\\n<< /Length '+cmd.length+' >>\\nstream\\n');add(cmd);add('endstream\\nendobj\\n')
+const commands='q\n'+dw.toFixed(2)+' 0 0 '+dh.toFixed(2)+' '+x.toFixed(2)+' '+y.toFixed(2)+' cm\n/Im1 Do\nQ\n',cmd=enc.encode(commands);
+offsets[contentId]=length;add(contentId+' 0 obj\n<< /Length '+cmd.length+' >>\nstream\n');add(cmd);add('endstream\nendobj\n')
 });
-const total=2+pages.length*3,xref=length;add('xref\\n0 '+(total+1)+'\\n0000000000 65535 f \\n');
-for(let i=1;i<=total;i++)add(String(offsets[i]).padStart(10,'0')+' 00000 n \\n');
-add('trailer\\n<< /Size '+(total+1)+' /Root 1 0 R >>\\nstartxref\\n'+xref+'\\n%%EOF');
+const total=2+pages.length*3,xref=length;add('xref\n0 '+(total+1)+'\n0000000000 65535 f \n');
+for(let i=1;i<=total;i++)add(String(offsets[i]).padStart(10,'0')+' 00000 n \n');
+add('trailer\n<< /Size '+(total+1)+' /Root 1 0 R >>\nstartxref\n'+xref+'\n%%EOF');
 const blob=new Blob(parts,{type:'application/pdf'}),url=URL.createObjectURL(blob),link=document.createElement('a');
 link.href=url;link.download=(root.name.replace(/[^a-z0-9_-]+/gi,'-').slice(0,65)||'stitch-pattern')+(multi?'-needles':'')+'-A4.pdf';
 document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
